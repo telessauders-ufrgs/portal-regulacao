@@ -1,6 +1,7 @@
 import React from 'react';
 import { LogIn, LogOut, Loader2, ClipboardList, Send, CheckCircle2, Trash2, Flag, CheckCheck, XCircle, Users } from 'lucide-react';
-import { getCorRowStyle, getCorBadgeStyle, getFilaCotasInfo } from '@/lib/corAgenda';
+import { getCorRowStyle, getCorBadgeStyle, getFilaCotasInfo, getClasseIndex, getFraseIndex } from '@/lib/corAgenda';
+import { useLegenda } from '@/hooks/useLegenda';
 import CheckInDetalhes from '@/components/CheckInDetalhes';
 import { trpc } from '@/lib/trpc';
 import { Link } from 'wouter';
@@ -96,13 +97,10 @@ function AgendaRow({
   isConcluida = false,
   dateLabel = 'Check-in em',
 }: AgendaRowProps) {
-  const getBadgeColor = (value: number | null | undefined): string => {
-    if (!value) return 'bg-muted text-muted-foreground';
-    if (value > 3) return 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300';
-    if (value > 2) return 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300';
-    if (value > 1) return 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300';
-    return 'bg-muted text-muted-foreground';
-  };
+  // Limites de Fila/Cotas e Index configuráveis (aba Recados e Legenda)
+  const legenda = useLegenda();
+  const getBadgeColor = (value: number | null | undefined): string =>
+    (!value ? '' : getClasseIndex(value, 'badge', legenda)) || 'bg-muted text-muted-foreground';
 
   const dateDisplay = showConcluidoEm && concluidoEm
     ? new Date(concluidoEm).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
@@ -146,7 +144,7 @@ function AgendaRow({
       {/* Fila/Cotas — destaque pela regra ≤ 4 (⏩) / > 4 (⚠️) */}
       <td className="px-2 py-1.5 text-center">
         {(() => {
-          const fc = getFilaCotasInfo(autCotas);
+          const fc = getFilaCotasInfo(autCotas, legenda);
           return (
             <span
               title={fc.frase ? `${fc.icone} ${fc.frase}` : (flagAutCotas || undefined)}
@@ -160,7 +158,7 @@ function AgendaRow({
       {/* IndexRegula */}
       <td className="px-2 py-1.5 text-center">
         <span
-          title={flagIndex || undefined}
+          title={flagIndex || getFraseIndex(indexRegula, legenda) || undefined}
           className={`inline-block px-1.5 py-0.5 rounded text-xs cursor-default ${getBadgeColor(indexRegula)}`}
         >
           {indexRegula != null ? indexRegula.toFixed(2) : '—'}
@@ -428,6 +426,7 @@ export default function MinhasAgendas() {
 
   // Janela do mapa das regiões de saúde — abre só quando o usuário clica em "RS"
   // num check-in ativo. Uma única janela para a página; guarda o município da agenda clicada.
+  const legenda = useLegenda();
   const [mapa, setMapa] = React.useState<{ aberto: boolean; municipio: string | null }>({ aberto: false, municipio: null });
 
   const isLoading = loadingCheckIns || loadingEncaminhadas || loadingConcluidas;
@@ -567,7 +566,7 @@ export default function MinhasAgendas() {
                           {/* Frase de alerta pela regra Fila/Cotas (mesma da barra azul da Lista de agendas)
                               + botão "RS" que abre o mapa das regiões de saúde sob demanda */}
                           {(() => {
-                            const fc = getFilaCotasInfo((ci as any).autCotas);
+                            const fc = getFilaCotasInfo((ci as any).autCotas, legenda);
                             const cores = fc.alta === null
                               ? 'bg-muted/40 text-muted-foreground border-border'
                               : fc.alta

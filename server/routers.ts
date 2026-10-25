@@ -35,6 +35,7 @@ import { testarQueryPlataformaBackend } from "./plataformaBackendClient";
 import { testarConectividadeTcp } from "./diagnosticoRede";
 import { registrarAtividadeSessao, registrarEventoAtividade, encerrarSessoesInativas, relatorioUso } from "./atividade";
 import { z } from "zod";
+import { normalizarLegenda, validarLegenda } from "@shared/legenda";
 
 export const appRouter = router({
   system: systemRouter,
@@ -2133,6 +2134,22 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // Editar título/mensagem de um recado — apenas admins.
+    // Obs.: quem já clicou em "Ciente" não vê o recado de novo; para reexibir a
+    // todos, envie um recado novo.
+    editar: protectedProcedure
+      .input(z.object({ id: z.number(), titulo: z.string().min(1), mensagem: z.string().min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Banco não disponível");
+        const userEmail = ctx.user?.email?.toLowerCase() ?? "";
+        const reg = await db.select({ perfil: reguladores.perfil }).from(reguladores).where(eq(reguladores.email, userEmail)).limit(1);
+        const perfil = (reg[0]?.perfil ?? "").toLowerCase();
+        if (!perfil.includes("administrador")) throw new Error("Acesso restrito a administradores");
+        await db.update(recados).set({ titulo: input.titulo, mensagem: input.mensagem }).where(eq(recados.id, input.id));
+        return { success: true };
+      }),
+
     // Desativar recado — apenas admins
     desativar: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -2146,6 +2163,63 @@ export const appRouter = router({
         await db.update(recados).set({ ativo: 0 }).where(eq(recados.id, input.id));
         return { success: true };
       }),
+  }),
+
+  // ── Configurações do portal: legenda da aba Início + limites das sinalizações ──
+  // Guardadas como JSON na tabela configuracoes_portal (chave 'legenda').
+  configPortal: router({
+    // Qualquer usuário logado lê (as tabelas usam os limites para colorir).
+    // null = nada salvo ainda → o cliente usa LEGENDA_PADRAO (shared/legenda.ts).
+    getLegenda: protectedProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return null;
+      const res = (await db.execute(sql`
+        SELECT valor, atualizado_em, atualizado_por FROM configuracoes_portal WHERE chave = 'legenda' LIMIT 1
+      `)) as unknown as [{ valor: string; atualizado_em: Date | string; atualizado_por: string | null }[], unknown];
+      const row = res[0][0];
+      if (!row) return null;
+      let bruto: unknown = null;
+      try { bruto = JSON.parse(row.valor); } catch { return null; }
+      return {
+        config: normalizarLegenda(bruto),
+        atualizadoEm: new Date(row.atualizado_em).toISOString(),
+        atualizadoPor: row.atualizado_por,
+      };
+    }),
+
+    // Salvar — apenas administradores
+    salvarLegenda: protectedProcedure
+      .input(z.object({ config: z.unknown() }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Banco não disponível");
+        const userEmail = ctx.user?.email?.toLowerCase() ?? "";
+        const reg = await db.select({ perfil: reguladores.perfil, nome: reguladores.nome }).from(reguladores).where(eq(reguladores.email, userEmail)).limit(1);
+        const perfil = (reg[0]?.perfil ?? "").toLowerCase();
+        if (!perfil.includes("administrador")) throw new Error("Acesso restrito a administradores");
+        const config = normalizarLegenda(input.config);
+        const erro = validarLegenda(config);
+        if (erro) throw new Error(erro);
+        const autor = reg[0]?.nome || userEmail;
+        await db.execute(sql`
+          INSERT INTO configuracoes_portal (chave, valor, atualizado_por)
+          VALUES ('legenda', ${JSON.stringify(config)}, ${autor})
+          ON DUPLICATE KEY UPDATE valor = VALUES(valor), atualizado_por = VALUES(atualizado_por), atualizado_em = CURRENT_TIMESTAMP
+        `);
+        return { success: true };
+      }),
+
+    // Voltar ao padrão (apaga a configuração salva) — apenas administradores
+    restaurarLegenda: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Banco não disponível");
+      const userEmail = ctx.user?.email?.toLowerCase() ?? "";
+      const reg = await db.select({ perfil: reguladores.perfil }).from(reguladores).where(eq(reguladores.email, userEmail)).limit(1);
+      const perfil = (reg[0]?.perfil ?? "").toLowerCase();
+      if (!perfil.includes("administrador")) throw new Error("Acesso restrito a administradores");
+      await db.execute(sql`DELETE FROM configuracoes_portal WHERE chave = 'legenda'`);
+      return { success: true };
+    }),
   }),
 
   loginLog: router({

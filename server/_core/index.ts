@@ -295,6 +295,19 @@ async function runPendingMigrations() {
       console.log('[Migration] recados e recados_lidos OK!');
     } catch(e) { console.warn('[Migration] recados:', e); }
 
+    // Migration: configurações do portal (legenda da aba Início + limites Fila/Cotas e Index)
+    try {
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS \`configuracoes_portal\` (
+          \`chave\`          varchar(100) NOT NULL PRIMARY KEY,
+          \`valor\`          mediumtext NOT NULL,
+          \`atualizado_em\`  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`atualizado_por\` varchar(255) NULL
+        )
+      `);
+      console.log('[Migration] configuracoes_portal OK!');
+    } catch(e) { console.warn('[Migration] configuracoes_portal:', e); }
+
     // Migration: criar tabelas de condutas GERCON (sincronizadas via Metabase)
     try {
       await db.execute(`

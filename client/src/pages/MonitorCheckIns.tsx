@@ -1,10 +1,12 @@
 import { Activity, Loader2, RefreshCw, UserCheck } from 'lucide-react';
-import { getCorRowStyle, getCorBadgeStyle } from '@/lib/corAgenda';
+import { getCorRowStyle, getCorBadgeStyle, getClasseIndex } from '@/lib/corAgenda';
+import { useLegenda } from '@/hooks/useLegenda';
 import { trpc } from '@/lib/trpc';
 import { UltimaAtualizacao } from '@/components/UltimaAtualizacao';
 import { useMemo, useEffect, useState } from 'react';
 
 export default function MonitorCheckIns() {
+  const legenda = useLegenda();
   const [filtroEspecialidade, setFiltroEspecialidade] = useState('');
   const [filtroRegulador, setFiltroRegulador] = useState('');
 
@@ -99,13 +101,9 @@ export default function MonitorCheckIns() {
     });
   }, [checkIns]);
 
-  const getBadgeColor = (value: number | null | undefined): string => {
-    if (!value) return 'bg-muted text-muted-foreground';
-    if (value > 3) return 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300';
-    if (value > 2) return 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300';
-    if (value > 1) return 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300';
-    return 'bg-muted text-muted-foreground';
-  };
+  // Cores do Index pelos limites configuráveis (aba Recados e Legenda)
+  const getBadgeColor = (value: number | null | undefined): string =>
+    (!value ? '' : getClasseIndex(value, 'badge', legenda)) || 'bg-muted text-muted-foreground';
 
   const totalAtivos = agendasAgrupadas.reduce((s, a) => s + a.reguladores.length, 0);
 

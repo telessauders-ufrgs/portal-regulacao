@@ -6,7 +6,9 @@ import EncaminharGrupoCell from './EncaminharGrupoCell';
 import AutoEncaminharCell from './AutoEncaminharCell';
 import AutoEncaminharGrupoCell from './AutoEncaminharGrupoCell';
 import CheckInCell from './CheckInCell';
-import { getCorRowStyle, getCorBadgeStyle, getCorPrioridade, getFilaCotasInfo } from '@/lib/corAgenda';
+import { getCorRowStyle, getCorBadgeStyle, getCorPrioridade, getFilaCotasInfo, getClasseIndex, getFraseIndex } from '@/lib/corAgenda';
+import { useLegenda } from '@/hooks/useLegenda';
+import type { LegendaConfig } from '@shared/legenda';
 import { UltimaAtualizacao } from '@/components/UltimaAtualizacao';
 
 interface DataTableProps {
@@ -44,8 +46,9 @@ interface Grupo {
 const TableRow = memo(function TableRow({
   row, isAdminOuMonitor, isRegulador, encaminhadosAtuais = [], checkInsAtuais = [],
   reguladoresList = [], emailUsuario, onUpdate, isConcluida, isSubRow = false,
-  checkInAtivoId, onCheckInLista, ocultarExtras = false,
+  checkInAtivoId, onCheckInLista, ocultarExtras = false, legenda,
 }: {
+  legenda: LegendaConfig; // limites/frases configuráveis (Recados e Legenda)
   row: (string | number)[];
   isAdminOuMonitor: boolean;
   isRegulador: boolean;
@@ -63,15 +66,8 @@ const TableRow = memo(function TableRow({
   const agendaId = typeof row[17] === 'number' ? row[17] : 0;
   const cor = String(row[14] ?? '');
   const flagIndex = String(row[13] ?? '');
-  const filaCotas = getFilaCotasInfo(row[6]);
+  const filaCotas = getFilaCotasInfo(row[6], legenda);
   const indexValue = parseFloat(String(row[7])) || 0;
-
-  const getIndexColor = (v: number) => {
-    if (v > 3) return 'bg-red-100 dark:bg-red-950/50 text-red-900 dark:text-red-300';
-    if (v > 2) return 'bg-orange-100 dark:bg-orange-950/50 text-orange-900 dark:text-orange-300';
-    if (v > 1) return 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-900 dark:text-yellow-300';
-    return '';
-  };
 
   const corRowStyle = getCorRowStyle(cor);
   const corBadgeStyle = getCorBadgeStyle(cor);
@@ -101,13 +97,13 @@ const TableRow = memo(function TableRow({
       <td className="px-2 py-1.5 text-center text-xs font-medium text-foreground">{String(row[11])}</td>
       <td className="px-2 py-1.5 text-xs text-muted-foreground">{isSubRow ? String(row[1]) : '—'}</td>
       <td className="px-2 py-1.5 text-center">
-        {/* Fila/Cotas — destaque pela regra ≤ 4 (⏩) / > 4 (⚠️); frase de orientação no tooltip */}
+        {/* Fila/Cotas — destaque pelo limite configurável (padrão 4); frase de orientação no tooltip */}
         <span title={filaCotas.frase ? `${filaCotas.icone} ${filaCotas.frase}` : undefined} className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold cursor-default ${filaCotas.badgeClass}`}>
           {filaCotas.texto}
         </span>
       </td>
       <td className="px-2 py-1.5 text-center">
-        <span title={flagIndex || undefined} className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold cursor-default ${getIndexColor(indexValue) || 'text-foreground'}`}>
+        <span title={flagIndex || getFraseIndex(indexValue, legenda) || undefined} className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold cursor-default ${getClasseIndex(indexValue, 'badge', legenda) || 'text-foreground'}`}>
           {indexValue.toFixed(2)}
         </span>
       </td>
@@ -187,8 +183,9 @@ const GrupoRow = memo(function GrupoRow({
   encaminhamentosPorAgenda = new Map(), checkInsPorAgenda = new Map(), reguladoresList = [],
   emailUsuario, onUpdate, concluidasSet,
   checkInAtivoId: checkInAtivoIdProp, onCheckInLista: onCheckInListaProp,
-  ocultarExtras = false,
+  ocultarExtras = false, legenda,
 }: {
+  legenda: LegendaConfig;
   grupo: Grupo;
   isExpanded: boolean;
   onToggle: () => void;
@@ -281,8 +278,8 @@ const GrupoRow = memo(function GrupoRow({
         </td>
         <td className="px-2 py-1.5 text-center">
           {isSingle ? (() => {
-            // Destaque pela regra ≤ 4 (⏩) / > 4 (⚠️), igual às sub-linhas
-            const fc = getFilaCotasInfo(linhas[0][6]);
+            // Destaque pela regra do Fila/Cotas (limite configurável), igual às sub-linhas
+            const fc = getFilaCotasInfo(linhas[0][6], legenda);
             return (
               <span title={fc.frase ? `${fc.icone} ${fc.frase}` : undefined}
                 className={`inline-block px-1.5 py-0.5 rounded text-sm font-semibold cursor-default ${fc.badgeClass}`}>
@@ -380,7 +377,7 @@ const GrupoRow = memo(function GrupoRow({
             checkInsAtuais={checkInsPorAgenda.get(agendaId) ?? []}
             reguladoresList={reguladoresList ?? []} emailUsuario={emailUsuario}
             onUpdate={onUpdate} isConcluida={isConcluida} isSubRow
-            checkInAtivoId={checkInAtivoIdProp} onCheckInLista={onCheckInListaProp} ocultarExtras={ocultarExtras} />
+            checkInAtivoId={checkInAtivoIdProp} onCheckInLista={onCheckInListaProp} ocultarExtras={ocultarExtras} legenda={legenda} />
         );
       })}
     </>
@@ -396,6 +393,7 @@ export default function DataTable({
   checkInAtivoId, onCheckInLista,
 }: DataTableProps) {
   const concluidasSet = useMemo(() => new Set(concluidasIds), [concluidasIds]);
+  const legenda = useLegenda(); // limites de Fila/Cotas e Index configuráveis
   const perfilLower = perfilUsuario.toLowerCase();
   const isAdminOuMonitor = perfilLower.includes('administrador') || perfilLower.includes('monitoramento');
   const isRegulador = perfilLower.includes('regulador') || perfilLower.includes('consultor');
@@ -718,7 +716,7 @@ export default function DataTable({
                   encaminhamentosPorAgenda={encaminhamentosPorAgenda} checkInsPorAgenda={checkInsPorAgenda}
                   reguladoresList={reguladoresList} emailUsuario={emailUsuario}
                   onUpdate={handleUpdate} concluidasSet={concluidasSet}
-                  checkInAtivoId={checkInAtivoId} onCheckInLista={onCheckInLista} ocultarExtras={colunasExtrasOcultas} />
+                  checkInAtivoId={checkInAtivoId} onCheckInLista={onCheckInLista} ocultarExtras={colunasExtrasOcultas} legenda={legenda} />
               );
             })}
           </tbody>

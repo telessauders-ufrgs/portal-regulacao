@@ -106,7 +106,7 @@ export default function Sidebar({ currentPage, onToggle }: SidebarProps) {
     { href: '/uso-portal', page: 'uso-portal', icon: Activity, label: 'Uso do Portal', visible: isAdminOrMonitorOnly },
     { href: '/previa-pg', page: 'previa-pg', icon: Database, label: 'Prévia PG', visible: perfilAtivo === 'administrador' || (!perfilAtivo && (regulador?.perfil ?? '').toLowerCase().includes('administrador')) },
     { href: '/teste-plataforma-backend', page: 'teste-plataforma-backend', icon: Database, label: 'Teste Plataforma Backend', visible: perfilAtivo === 'administrador' || (!perfilAtivo && (regulador?.perfil ?? '').toLowerCase().includes('administrador')) },
-    { href: '/recados', page: 'recados', icon: MessageSquare, label: 'Recados', visible: perfilAtivo === 'administrador' || (!perfilAtivo && (regulador?.perfil ?? '').toLowerCase().includes('administrador')) },
+    { href: '/recados', page: 'recados', icon: MessageSquare, label: 'Recados e Legenda', visible: perfilAtivo === 'administrador' || (!perfilAtivo && (regulador?.perfil ?? '').toLowerCase().includes('administrador')) },
     { href: '/sem-cotas', page: 'sem-cotas', icon: TrendingDown, label: 'Sem Cotas', visible: isAdminOrMonitorOnly },
     { href: '/documentos', page: 'documentos', icon: FolderOpen, label: 'Documentos', visible: true },
   ].filter(item => item.visible);

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, FileText, ListOrdered, ExternalLink, TrendingDown, ChevronsUpDown, Columns2, X } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { getCorRowStyle, getCorBadgeStyle, getFilaCotasInfo } from '@/lib/corAgenda';
+import { getCorRowStyle, getCorBadgeStyle, getFilaCotasInfo, getClasseIndex } from '@/lib/corAgenda';
+import { useLegenda } from '@/hooks/useLegenda';
 
 interface CheckInDetalhesProps {
   agendaId: number;
@@ -12,9 +13,10 @@ interface CheckInDetalhesProps {
   autoExpandir?: boolean;
 }
 
-/** Célula de Fila/Cotas com o mesmo destaque da Lista de agendas (≤ 4 ⏩ / > 4 ⚠️). */
+/** Célula de Fila/Cotas com o mesmo destaque da Lista de agendas (limite configurável). */
 function CelulaFilaCotas({ raw }: { raw: unknown }) {
-  const fc = getFilaCotasInfo(raw);
+  const legenda = useLegenda();
+  const fc = getFilaCotasInfo(raw, legenda);
   return (
     <span title={fc.frase ? `${fc.icone} ${fc.frase}` : undefined}
       className={`inline-block px-1 rounded font-semibold cursor-default ${fc.badgeClass}`}>
@@ -115,21 +117,12 @@ export default function CheckInDetalhes({ agendaId, agendaNome, especialidade, c
     return sortDir === 'desc' ? String(bv).localeCompare(String(av), 'pt-BR') : String(av).localeCompare(String(bv), 'pt-BR');
   });
 
-  const getIndexColor = (value: number | null | undefined): string => {
-    if (!value) return 'text-muted-foreground';
-    if (value > 3) return 'text-red-600 dark:text-red-400 font-bold';
-    if (value > 2) return 'text-orange-600 dark:text-orange-400 font-semibold';
-    if (value > 1) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-muted-foreground';
-  };
-
-  const getBgIndex = (value: number | null | undefined): string => {
-    if (!value) return 'bg-muted/50';
-    if (value > 3) return 'bg-red-50 dark:bg-red-950/30';
-    if (value > 2) return 'bg-orange-50 dark:bg-orange-950/30';
-    if (value > 1) return 'bg-yellow-50 dark:bg-yellow-950/30';
-    return 'bg-muted/30';
-  };
+  // Cores do Index pelos limites configuráveis (aba Recados e Legenda)
+  const legenda = useLegenda();
+  const getIndexColor = (value: number | null | undefined): string =>
+    !value ? 'text-muted-foreground' : getClasseIndex(value, 'texto', legenda);
+  const getBgIndex = (value: number | null | undefined): string =>
+    !value ? 'bg-muted/50' : getClasseIndex(value, 'fundo', legenda);
 
   return (
     <div className="border-t border-border/50">

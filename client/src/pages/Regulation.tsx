@@ -9,6 +9,7 @@ import { trpc } from '@/lib/trpc';
 import { UltimaAtualizacao } from '@/components/UltimaAtualizacao';
 import { LogOut, CheckCircle2, Loader2, X, GripHorizontal, Map as MapIcon } from 'lucide-react';
 import MapaRegioesSaude from '@/components/MapaRegioesSaude';
+import { useLegenda } from '@/hooks/useLegenda';
 
 interface RegulationProps {
   data: (string | number)[][];
@@ -42,6 +43,8 @@ export default function Regulation({ data, concluidasIds = [], onConcluir, onRef
   // Check-in ativo na tela de Lista de Agendas
   // Janela do mapa das regiões de saúde — abre só quando o usuário clica no botão "RS"
   const [mapaAberto, setMapaAberto] = useState(false);
+  // Limite e frases do Fila/Cotas configuráveis (aba Recados e Legenda)
+  const legenda = useLegenda();
   const [checkInAtivo, setCheckInAtivo] = useState<{
     agendaId: number;
     agendaNome: string;
@@ -453,15 +456,13 @@ export default function Regulation({ data, concluidasIds = [], onConcluir, onRef
               </div>
               {checkInAtivo.filaCotas !== undefined && (
                 <div className={`px-4 py-1.5 text-xs font-medium shrink-0 leading-snug ${
-                  checkInAtivo.filaCotas <= 4
+                  checkInAtivo.filaCotas <= legenda.filaCotas.limite
                     ? 'bg-emerald-900/70 text-emerald-100'
                     : 'bg-amber-900/70 text-amber-100'
                 }`}>
-                  {checkInAtivo.filaCotas <= 4 ? (
-                    <>⏩ Autorize o que for pertinente à especialidade e ao prestador indicado. Não faça consultoria ativa, não use aguarda matriciamento ou pendente para pedir informações sobre prioridade.</>
-                  ) : (
-                    <>⚠️ Aplique os critérios do protocolo. Utilize a consultoria ativa, o status Pendente ou Aguarda Matriciamento (nas especialidades disponíveis no 0800) para solicitar as informações necessárias ao cumprimento dos critérios do protocolo e à definição da prioridade.</>
-                  )}
+                  {checkInAtivo.filaCotas <= legenda.filaCotas.limite
+                    ? <>⏩ {legenda.filaCotas.fraseBaixa}</>
+                    : <>⚠️ {legenda.filaCotas.fraseAlta}</>}
                 </div>
               )}
               {/* Conteúdo */}
