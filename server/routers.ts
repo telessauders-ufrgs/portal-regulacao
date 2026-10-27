@@ -26,7 +26,7 @@ import {
   condutasGercon,
   condutasGerconSyncLog,
 } from "../drizzle/schema";
-import { asc, desc, eq, and, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, and, inArray, sql, gte, lte } from "drizzle-orm";
 import { syncSheetsToDb, syncPrioridadesToDb, syncDicionarioToDb, syncSemCotasToDb } from "./syncSheets";
 import { syncFromPostgres } from "./syncPostgres";
 import { syncCondutasGerconComLog } from "./syncMetabase";
@@ -2224,8 +2224,14 @@ export const appRouter = router({
 
   loginLog: router({
     // Listar todos os registros de login/logout (admin e monitoramento apenas)
+    // Filtro de período opcional (desde/ate em ISO) — os demais filtros
+    // (nome, e-mail, status) são feitos no navegador.
     listar: protectedProcedure
-      .input(z.object({ limite: z.number().optional() }))
+      .input(z.object({
+        limite: z.number().int().min(1).max(20000).optional(),
+        desde: z.string().optional(), // ISO — login a partir desta data/hora
+        ate: z.string().optional(),   // ISO — login até esta data/hora
+      }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) return [];
@@ -2235,9 +2241,13 @@ export const appRouter = router({
         const perfil = (reg[0]?.perfil ?? '').toLowerCase();
         if (!perfil.includes('administrador') && !perfil.includes('monitoramento')) return [];
         await encerrarSessoesInativas();
+        const condicoes = [];
+        if (input.desde) condicoes.push(gte(loginLog.loginAt, new Date(input.desde)));
+        if (input.ate) condicoes.push(lte(loginLog.loginAt, new Date(input.ate)));
         return db
           .select()
           .from(loginLog)
+          .where(condicoes.length ? and(...condicoes) : undefined)
           .orderBy(desc(loginLog.loginAt))
           .limit(input.limite ?? 500);
       }),
