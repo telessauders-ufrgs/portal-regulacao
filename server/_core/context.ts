@@ -15,6 +15,9 @@ export async function createContext(
 
   try {
     user = await sdk.authenticateRequest(opts.req);
+    // E-mail sempre em minúsculas: no Postgres a comparação de texto diferencia
+    // maiúsculas de minúsculas (no MySQL não diferenciava).
+    if (user?.email) user = { ...user, email: user.email.toLowerCase() };
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;

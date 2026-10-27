@@ -52,7 +52,7 @@ async function startServer() {
       const { eq } = await import("drizzle-orm");
       const db = await getDb();
       if (db) {
-        await db.delete(checkIns).where(eq(checkIns.usuarioEmail, user.email));
+        await db.delete(checkIns).where(eq(checkIns.usuarioEmail, user.email.toLowerCase()));
       }
       res.status(204).end();
     } catch {

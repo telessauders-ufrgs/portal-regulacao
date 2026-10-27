@@ -14,7 +14,12 @@ import { getDb } from "./db";
  */
 export const INATIVIDADE_MIN = 30;
 
-type Rows<T> = [T[], unknown];
+/** Formato do resultado de db.execute no Postgres (node-postgres): { rows: [...] } */
+type Rows<T> = { rows: T[] };
+
+/** Intervalo de N minutos/dias para usar dentro de sql`` (Postgres). */
+const minutos = (n: number) => sql`make_interval(mins => ${n}::int)`;
+const intervaloDeDias = (n: number) => sql`make_interval(days => ${n}::int)`;
 
 /** Registra atividade do usuário: estende a sessão aberta ou abre uma nova. */
 export async function registrarAtividadeSessao(email: string, nome: string | null): Promise<void> {
@@ -26,12 +31,12 @@ export async function registrarAtividadeSessao(email: string, nome: string | nul
     SELECT id FROM login_log
     WHERE regulador_email = ${e}
       AND logout_at IS NULL
-      AND COALESCE(ultima_atividade_at, login_at) > DATE_SUB(NOW(), INTERVAL ${INATIVIDADE_MIN} MINUTE)
+      AND COALESCE(ultima_atividade_at, login_at) > NOW() - ${minutos(INATIVIDADE_MIN)}
     ORDER BY login_at DESC
     LIMIT 1
   `)) as unknown as Rows<{ id: number }>;
 
-  const aberta = res[0][0];
+  const aberta = res.rows[0];
   if (aberta) {
     await db.execute(sql`UPDATE login_log SET ultima_atividade_at = NOW() WHERE id = ${aberta.id}`);
     return;
@@ -57,7 +62,7 @@ export async function encerrarSessoesInativas(): Promise<void> {
     UPDATE login_log
     SET logout_at = COALESCE(ultima_atividade_at, login_at)
     WHERE logout_at IS NULL
-      AND COALESCE(ultima_atividade_at, login_at) <= DATE_SUB(NOW(), INTERVAL ${INATIVIDADE_MIN} MINUTE)
+      AND COALESCE(ultima_atividade_at, login_at) <= NOW() - ${minutos(INATIVIDADE_MIN)}
   `);
 }
 
@@ -102,6 +107,7 @@ export async function relatorioUso(dias: number): Promise<LinhaRelatorioUso[]> {
   if (!db) return [];
 
   await encerrarSessoesInativas();
+  const intervaloDias = intervaloDeDias(dias);
 
   const regs = (await db.execute(sql`
     SELECT LOWER(email) AS email, nome, perfil FROM reguladores WHERE ativo = 'sim'
@@ -110,9 +116,9 @@ export async function relatorioUso(dias: number): Promise<LinhaRelatorioUso[]> {
   const sessoes = (await db.execute(sql`
     SELECT LOWER(regulador_email) AS email,
            COUNT(*) AS sessoes,
-           COALESCE(SUM(TIMESTAMPDIFF(MINUTE, login_at, COALESCE(logout_at, ultima_atividade_at, login_at))), 0) AS minutos
+           COALESCE(SUM(FLOOR(EXTRACT(EPOCH FROM (COALESCE(logout_at, ultima_atividade_at, login_at) - login_at)) / 60)), 0) AS minutos
     FROM login_log
-    WHERE login_at >= DATE_SUB(NOW(), INTERVAL ${dias} DAY)
+    WHERE login_at >= NOW() - ${intervaloDias}
     GROUP BY LOWER(regulador_email)
   `)) as unknown as Rows<{ email: string; sessoes: number; minutos: number }>;
 
@@ -124,10 +130,10 @@ export async function relatorioUso(dias: number): Promise<LinhaRelatorioUso[]> {
 
   const eventos = (await db.execute(sql`
     SELECT usuario_email AS email,
-           SUM(tipo = 'checkin')   AS checkins,
-           SUM(tipo = 'conclusao') AS conclusoes
+           COUNT(*) FILTER (WHERE tipo = 'checkin')   AS checkins,
+           COUNT(*) FILTER (WHERE tipo = 'conclusao') AS conclusoes
     FROM atividade_log
-    WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${dias} DAY)
+    WHERE created_at >= NOW() - ${intervaloDias}
     GROUP BY usuario_email
   `)) as unknown as Rows<{ email: string; checkins: number; conclusoes: number }>;
 
@@ -140,12 +146,12 @@ export async function relatorioUso(dias: number): Promise<LinhaRelatorioUso[]> {
   const toIso = (v: Date | string | null | undefined) =>
     v == null ? null : new Date(v).toISOString();
 
-  const mSessoes = new Map(sessoes[0].map(r => [r.email, r]));
-  const mUltPortal = new Map(ultimaPortal[0].map(r => [r.email, r.ultima]));
-  const mEventos = new Map(eventos[0].map(r => [r.email, r]));
-  const mUltReg = new Map(ultimaRegulacao[0].map(r => [r.email, r.ultima]));
+  const mSessoes = new Map(sessoes.rows.map(r => [r.email, r]));
+  const mUltPortal = new Map(ultimaPortal.rows.map(r => [r.email, r.ultima]));
+  const mEventos = new Map(eventos.rows.map(r => [r.email, r]));
+  const mUltReg = new Map(ultimaRegulacao.rows.map(r => [r.email, r.ultima]));
 
-  return regs[0].map(r => ({
+  return regs.rows.map(r => ({
     email: r.email,
     nome: r.nome,
     perfil: r.perfil,

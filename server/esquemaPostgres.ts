@@ -272,6 +272,19 @@ const COMANDOS: string[] = [
   `CREATE INDEX IF NOT EXISTS "idx_check_ins_agenda" ON "check_ins" ("agenda_id")`,
 ];
 
+/**
+ * Normaliza e-mails para minúsculas nos dados existentes (ex.: copiados do MySQL).
+ * No MySQL "Fulano@x.org" e "fulano@x.org" eram iguais; no Postgres não são.
+ * O portal passa a gravar e comparar sempre em minúsculas. Idempotente.
+ */
+const NORMALIZAR_EMAILS: [string, string][] = [
+  ["reguladores", "email"], ["users", "email"], ["check_ins", "usuario_email"],
+  ["agendas_concluidas", "usuario_email"], ["encaminhamentos", "regulador_email"],
+  ["encaminhamentos", "encaminhado_por_email"], ["agendas_favoritas", "regulador_email"],
+  ["regulador_config", "regulador_email"], ["login_log", "regulador_email"],
+  ["atividade_log", "usuario_email"], ["recados", "autor_email"], ["recados_lidos", "usuario_email"],
+];
+
 export async function criarEsquemaPostgres(db: Db): Promise<void> {
   let ok = 0;
   for (const comando of COMANDOS) {
@@ -284,4 +297,14 @@ export async function criarEsquemaPostgres(db: Db): Promise<void> {
     }
   }
   console.log(`[Esquema PG] ${ok}/${COMANDOS.length} comandos aplicados (tabelas e índices conferidos).`);
+
+  for (const [tabela, coluna] of NORMALIZAR_EMAILS) {
+    try {
+      await db.execute(sql.raw(`UPDATE "${tabela}" SET "${coluna}" = LOWER("${coluna}") WHERE "${coluna}" <> LOWER("${coluna}")`));
+    } catch (e) {
+      // Pode falhar se houver duplicata após a conversão (ex.: dois cadastros iguais
+      // com maiúsculas diferentes) — nesse caso, avisa e segue.
+      console.warn(`[Esquema PG] Não foi possível normalizar ${tabela}.${coluna}:`, (e as Error).message);
+    }
+  }
 }

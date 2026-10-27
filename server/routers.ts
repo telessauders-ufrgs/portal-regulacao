@@ -49,7 +49,10 @@ export const appRouter = router({
           const db = await getDb();
           if (db) {
             await db.execute(
-              sql`UPDATE login_log SET logout_at = NOW() WHERE regulador_email = ${userEmail} AND logout_at IS NULL ORDER BY login_at DESC LIMIT 1`
+              // Postgres não aceita ORDER BY/LIMIT em UPDATE: escolhe a sessão aberta mais recente por subconsulta
+              sql`UPDATE login_log SET logout_at = NOW() WHERE id = (
+                    SELECT id FROM login_log WHERE regulador_email = ${userEmail} AND logout_at IS NULL ORDER BY login_at DESC LIMIT 1
+                  )`
             );
           }
         } catch { /* ignora erros no log */ }
@@ -143,11 +146,11 @@ export const appRouter = router({
           regulacaoData,
           and(
             eq(agendasConcluidas.agendaNome, regulacaoData.agenda),
-            sql`${agendasConcluidas.municipio} <=> ${regulacaoData.municipio}`,
-            sql`${agendasConcluidas.central} <=> ${regulacaoData.central}`
+            sql`${agendasConcluidas.municipio} IS NOT DISTINCT FROM ${regulacaoData.municipio}`,
+            sql`${agendasConcluidas.central} IS NOT DISTINCT FROM ${regulacaoData.central}`
           )
         )
-        .where(sql`DATE(CONVERT_TZ(${agendasConcluidas.concluidoEm}, '+00:00', '-03:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-03:00'))`);
+        .where(sql`(${agendasConcluidas.concluidoEm} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`);
       const concluidasIds = concluidasHoje.map(c => c.currentId);
 
       // Layout de índices (novo cabeçalho a partir de 2026-04):
@@ -654,8 +657,8 @@ export const appRouter = router({
           regulacaoData,
           and(
             eq(encaminhamentos.agendaNome, regulacaoData.agenda),
-            sql`${encaminhamentos.municipio} <=> ${regulacaoData.municipio}`,
-            sql`${encaminhamentos.central} <=> ${regulacaoData.central}`
+            sql`${encaminhamentos.municipio} IS NOT DISTINCT FROM ${regulacaoData.municipio}`,
+            sql`${encaminhamentos.central} IS NOT DISTINCT FROM ${regulacaoData.central}`
           )
         )
         .where(eq(encaminhamentos.reguladorEmail, email))
@@ -690,8 +693,8 @@ export const appRouter = router({
           regulacaoData,
           and(
             eq(agendasFavoritas.agendaNome, regulacaoData.agenda),
-            sql`${agendasFavoritas.municipio} <=> ${regulacaoData.municipio}`,
-            sql`${agendasFavoritas.central} <=> ${regulacaoData.central}`
+            sql`${agendasFavoritas.municipio} IS NOT DISTINCT FROM ${regulacaoData.municipio}`,
+            sql`${agendasFavoritas.central} IS NOT DISTINCT FROM ${regulacaoData.central}`
           )
         )
         .where(eq(agendasFavoritas.reguladorEmail, email));
@@ -908,13 +911,13 @@ export const appRouter = router({
           regulacaoData,
           and(
             eq(checkIns.agendaNome, regulacaoData.agenda),
-            sql`${checkIns.municipio} <=> ${regulacaoData.municipio}`,
-            sql`${checkIns.central} <=> ${regulacaoData.central}`
+            sql`${checkIns.municipio} IS NOT DISTINCT FROM ${regulacaoData.municipio}`,
+            sql`${checkIns.central} IS NOT DISTINCT FROM ${regulacaoData.central}`
           )
         )
         .where(and(
           eq(checkIns.usuarioEmail, email),
-          sql`DATE(CONVERT_TZ(${checkIns.createdAt}, '+00:00', '-03:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-03:00'))`
+          sql`(${checkIns.createdAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`
         ))
         .orderBy(desc(checkIns.createdAt));
     }),
@@ -939,8 +942,8 @@ export const appRouter = router({
             regulacaoData,
             and(
               eq(checkIns.agendaNome, regulacaoData.agenda),
-              sql`${checkIns.municipio} <=> ${regulacaoData.municipio}`,
-              sql`${checkIns.central} <=> ${regulacaoData.central}`
+              sql`${checkIns.municipio} IS NOT DISTINCT FROM ${regulacaoData.municipio}`,
+              sql`${checkIns.central} IS NOT DISTINCT FROM ${regulacaoData.central}`
             )
           )
           .where(inArray(regulacaoData.id, input.agendaIds));
@@ -992,11 +995,11 @@ export const appRouter = router({
           regulacaoData,
           and(
             eq(checkIns.agendaNome, regulacaoData.agenda),
-            sql`${checkIns.municipio} <=> ${regulacaoData.municipio}`,
-            sql`${checkIns.central} <=> ${regulacaoData.central}`
+            sql`${checkIns.municipio} IS NOT DISTINCT FROM ${regulacaoData.municipio}`,
+            sql`${checkIns.central} IS NOT DISTINCT FROM ${regulacaoData.central}`
           )
         )
-        .where(sql`DATE(CONVERT_TZ(${checkIns.createdAt}, '+00:00', '-03:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-03:00'))`)
+        .where(sql`(${checkIns.createdAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`)
         .orderBy(desc(checkIns.createdAt));
     }),
 
@@ -1029,8 +1032,8 @@ export const appRouter = router({
           .from(checkIns)
           .where(and(
             eq(checkIns.agendaNome, input.agendaNome),
-            sql`${checkIns.municipio} <=> ${input.municipio ?? null}`,
-            sql`${checkIns.central} <=> ${input.central ?? null}`,
+            sql`${checkIns.municipio} IS NOT DISTINCT FROM ${input.municipio ?? null}`,
+            sql`${checkIns.central} IS NOT DISTINCT FROM ${input.central ?? null}`,
             eq(checkIns.usuarioEmail, usuarioEmail)
           ))
           .limit(1);
@@ -1041,8 +1044,8 @@ export const appRouter = router({
             .delete(checkIns)
             .where(and(
               eq(checkIns.agendaNome, input.agendaNome),
-              sql`${checkIns.municipio} <=> ${input.municipio ?? null}`,
-              sql`${checkIns.central} <=> ${input.central ?? null}`,
+              sql`${checkIns.municipio} IS NOT DISTINCT FROM ${input.municipio ?? null}`,
+              sql`${checkIns.central} IS NOT DISTINCT FROM ${input.central ?? null}`,
               eq(checkIns.usuarioEmail, usuarioEmail)
             ));
           return { action: "checkout" as const, bloqueado: false, reguladores: [] };
@@ -1058,8 +1061,8 @@ export const appRouter = router({
           .from(checkIns)
           .where(and(
             eq(checkIns.agendaNome, input.agendaNome),
-            sql`${checkIns.municipio} <=> ${input.municipio ?? null}`,
-            sql`${checkIns.central} <=> ${input.central ?? null}`
+            sql`${checkIns.municipio} IS NOT DISTINCT FROM ${input.municipio ?? null}`,
+            sql`${checkIns.central} IS NOT DISTINCT FROM ${input.central ?? null}`
           ));
 
         const LIMITE_CHECKINS = 2;
@@ -1286,7 +1289,7 @@ export const appRouter = router({
         .from(agendasConcluidas)
         .where(and(
           eq(agendasConcluidas.usuarioEmail, email),
-          sql`DATE(CONVERT_TZ(concluido_em, '+00:00', '-03:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-03:00'))`
+          sql`(concluido_em AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`
         ))
         .orderBy(desc(agendasConcluidas.concluidoEm));
     }),
@@ -1318,8 +1321,8 @@ export const appRouter = router({
           .delete(checkIns)
           .where(and(
             eq(checkIns.agendaNome, input.agendaNome),
-            sql`${checkIns.municipio} <=> ${input.municipio ?? null}`,
-            sql`${checkIns.central} <=> ${input.central ?? null}`,
+            sql`${checkIns.municipio} IS NOT DISTINCT FROM ${input.municipio ?? null}`,
+            sql`${checkIns.central} IS NOT DISTINCT FROM ${input.central ?? null}`,
             eq(checkIns.usuarioEmail, usuarioEmail)
           ));
 
@@ -1329,8 +1332,8 @@ export const appRouter = router({
           .delete(encaminhamentos)
           .where(and(
             eq(encaminhamentos.agendaNome, input.agendaNome),
-            sql`${encaminhamentos.municipio} <=> ${input.municipio ?? null}`,
-            sql`${encaminhamentos.central} <=> ${input.central ?? null}`,
+            sql`${encaminhamentos.municipio} IS NOT DISTINCT FROM ${input.municipio ?? null}`,
+            sql`${encaminhamentos.central} IS NOT DISTINCT FROM ${input.central ?? null}`,
             eq(encaminhamentos.reguladorEmail, usuarioEmail)
           ));
 
@@ -1897,7 +1900,7 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) throw new Error('Banco não disponível');
       const result = await db.update(semCotas).set({ isNova: 'nao' }).where(eq(semCotas.isNova, 'sim'));
-      return { count: result[0].affectedRows };
+      return { count: result.rowCount ?? 0 };
     }),
 
     /**
@@ -2130,7 +2133,7 @@ export const appRouter = router({
         await db.insert(recadosLidos).values({
           recadoId: input.recadoId,
           usuarioEmail: userEmail,
-        }).onDuplicateKeyUpdate({ set: { lidoEm: sql`NOW()` } });
+        }).onConflictDoUpdate({ target: [recadosLidos.recadoId, recadosLidos.usuarioEmail], set: { lidoEm: sql`NOW()` } });
         return { success: true };
       }),
 
@@ -2175,8 +2178,8 @@ export const appRouter = router({
       if (!db) return null;
       const res = (await db.execute(sql`
         SELECT valor, atualizado_em, atualizado_por FROM configuracoes_portal WHERE chave = 'legenda' LIMIT 1
-      `)) as unknown as [{ valor: string; atualizado_em: Date | string; atualizado_por: string | null }[], unknown];
-      const row = res[0][0];
+      `)) as unknown as { rows: { valor: string; atualizado_em: Date | string; atualizado_por: string | null }[] };
+      const row = res.rows[0];
       if (!row) return null;
       let bruto: unknown = null;
       try { bruto = JSON.parse(row.valor); } catch { return null; }
@@ -2204,7 +2207,7 @@ export const appRouter = router({
         await db.execute(sql`
           INSERT INTO configuracoes_portal (chave, valor, atualizado_por)
           VALUES ('legenda', ${JSON.stringify(config)}, ${autor})
-          ON DUPLICATE KEY UPDATE valor = VALUES(valor), atualizado_por = VALUES(atualizado_por), atualizado_em = CURRENT_TIMESTAMP
+          ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado_por = EXCLUDED.atualizado_por, atualizado_em = CURRENT_TIMESTAMP
         `);
         return { success: true };
       }),
