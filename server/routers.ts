@@ -133,7 +133,7 @@ export const appRouter = router({
       const data = await db
         .select()
         .from(regulacaoData)
-        .orderBy(desc(regulacaoData.indexRegula));
+        .orderBy(sql`${regulacaoData.indexRegula} DESC NULLS LAST`);
 
       // Buscar agendas concluídas por QUALQUER usuário hoje, resolvendo o ID ATUAL de regulacao_data.
       // O agendaId salvo nas concluídas pode estar desatualizado após uma sincronização (pois o
@@ -662,7 +662,7 @@ export const appRouter = router({
           )
         )
         .where(eq(encaminhamentos.reguladorEmail, email))
-        .orderBy(desc(regulacaoData.indexRegula), desc(encaminhamentos.createdAt));
+        .orderBy(sql`${regulacaoData.indexRegula} DESC NULLS LAST`, desc(encaminhamentos.createdAt));
 
       // 2. Buscar agendas favoritas do regulador com dados atualizados via JOIN
       const favResult = await db
@@ -1134,7 +1134,7 @@ export const appRouter = router({
         const todasAgendas = await db
           .select()
           .from(regulacaoData)
-          .orderBy(desc(regulacaoData.indexRegula));
+          .orderBy(sql`${regulacaoData.indexRegula} DESC NULLS LAST`);
 
         // Verificar se há configuração personalizada de agendas relacionadas.
         // A config é salva por nome de agenda (não por ID), pois a mesma agenda

@@ -84,6 +84,21 @@ async function startServer() {
     res.status(204).end();
   });
 
+  // Verificação de saúde para o servidor/monitoramento da UFRGS:
+  // GET /api/health → 200 {"ok":true,"banco":"ok"} ou 503 se o banco não responder.
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const { getDb } = await import("../db");
+      const { sql } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) { res.status(503).json({ ok: false, banco: "sem DATABASE_URL" }); return; }
+      await db.execute(sql`SELECT 1`);
+      res.json({ ok: true, banco: "ok" });
+    } catch (e) {
+      res.status(503).json({ ok: false, banco: (e as Error).message });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

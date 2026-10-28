@@ -298,6 +298,8 @@ export async function criarEsquemaPostgres(db: Db): Promise<void> {
   }
   console.log(`[Esquema PG] ${ok}/${COMANDOS.length} comandos aplicados (tabelas e índices conferidos).`);
 
+  await ajustarSequencias(db);
+
   for (const [tabela, coluna] of NORMALIZAR_EMAILS) {
     try {
       await db.execute(sql.raw(`UPDATE "${tabela}" SET "${coluna}" = LOWER("${coluna}") WHERE "${coluna}" <> LOWER("${coluna}")`));
@@ -307,4 +309,31 @@ export async function criarEsquemaPostgres(db: Db): Promise<void> {
       console.warn(`[Esquema PG] Não foi possível normalizar ${tabela}.${coluna}:`, (e as Error).message);
     }
   }
+}
+
+/**
+ * Acerta o contador de IDs (sequence) de cada tabela para MAX(id).
+ * Necessário depois de copiar dados do MySQL mantendo os IDs: sem isso, o
+ * próximo INSERT tentaria reutilizar o id 1 e falharia com "duplicate key".
+ * Idempotente e seguro — se a tabela estiver vazia, o próximo id será 1.
+ */
+async function ajustarSequencias(db: Db): Promise<void> {
+  const res = (await db.execute(sql.raw(`
+    SELECT c.table_name AS tabela
+    FROM information_schema.columns c
+    WHERE c.table_schema = current_schema() AND c.column_name = 'id'
+      AND c.column_default LIKE 'nextval(%'
+  `))) as unknown as { rows: { tabela: string }[] };
+  let n = 0;
+  for (const { tabela } of res.rows) {
+    try {
+      await db.execute(sql.raw(
+        `SELECT setval(pg_get_serial_sequence('"${tabela}"', 'id'), COALESCE((SELECT MAX(id) FROM "${tabela}"), 0) + 1, false)`
+      ));
+      n++;
+    } catch (e) {
+      console.warn(`[Esquema PG] Não foi possível ajustar a sequência de ${tabela}:`, (e as Error).message);
+    }
+  }
+  console.log(`[Esquema PG] Contadores de ID conferidos em ${n} tabelas.`);
 }
